@@ -1,0 +1,143 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Visibility {
+  public
+  friends
+  private
+}
+
+enum FriendRequestStatus {
+  pending
+  accepted
+  rejected
+}
+
+model User {
+  id             String           @id @default(uuid())
+  email          String           @unique
+  username       String           @unique
+  passwordHash   String
+  displayName    String
+  bio            String?
+  avatarUrl      String?
+  coverUrl       String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  posts          Post[]
+  comments       Comment[]
+  reactions      Reaction[]
+  outgoingReqs   FriendRequest[]  @relation("outgoing")
+  incomingReqs   FriendRequest[]  @relation("incoming")
+  sentShares     Share[]
+  notifications  Notification[]   @relation("recipient")
+  actorEvents    Notification[]   @relation("actor")
+}
+
+model FriendRequest {
+  id          String              @id @default(uuid())
+  requesterId String
+  receiverId  String
+  status      FriendRequestStatus @default(pending)
+  createdAt   DateTime            @default(now())
+
+  requester   User @relation("outgoing", fields: [requesterId], references: [id])
+  receiver    User @relation("incoming", fields: [receiverId], references: [id])
+
+  @@index([requesterId, receiverId])
+}
+
+model Friendship {
+  id        String   @id @default(uuid())
+  userId    String
+  friendId  String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, friendId])
+}
+
+model Post {
+  id          String      @id @default(uuid())
+  authorId    String
+  contentText String
+  visibility  Visibility  @default(public)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  author      User        @relation(fields: [authorId], references: [id])
+  comments    Comment[]
+  reactions   Reaction[]
+  media       PostMedia[]
+  shares      Share[]
+
+  @@index([authorId, createdAt(sort: Desc)])
+}
+
+model PostMedia {
+  id        String   @id @default(uuid())
+  postId    String
+  mediaType String
+  url       String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  postId    String
+  authorId  String
+  content   String
+  createdAt DateTime @default(now())
+
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author    User     @relation(fields: [authorId], references: [id])
+}
+
+model Reaction {
+  id           String   @id @default(uuid())
+  postId       String
+  userId       String
+  reactionType String   @default("like")
+  createdAt    DateTime @default(now())
+
+  post         Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user         User     @relation(fields: [userId], references: [id])
+
+  @@unique([postId, userId])
+}
+
+model Share {
+  id          String   @id @default(uuid())
+  postId      String
+  authorId    String
+  shareText   String?
+  createdAt   DateTime @default(now())
+
+  post        Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author      User     @relation(fields: [authorId], references: [id])
+}
+
+model Notification {
+  id         String   @id @default(uuid())
+  userId     String
+  actorId    String?
+  type       String
+  entityId   String?
+  message    String
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  user       User     @relation("recipient", fields: [userId], references: [id], onDelete: Cascade)
+  actor      User?    @relation("actor", fields: [actorId], references: [id])
+
+  @@index([userId, isRead, createdAt(sort: Desc)])
+}
